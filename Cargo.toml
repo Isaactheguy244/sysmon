@@ -2,6 +2,13 @@
 name = "sysmon"
 version = "0.1.0"
 edition = "2021"
+description = "A fast, beautiful, and lightweight Rust TUI system monitor for Linux"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/Isaactheguy244/sysmon"
+readme = "README.md"
+keywords = ["tui", "system-monitor", "linux", "htop", "terminal"]
+categories = ["command-line-utilities"]
+authors = ["Isaac Henry"]
 
 [[bin]]
 name = "sysmon"
