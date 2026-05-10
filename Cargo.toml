@@ -1,6 +1,6 @@
 [package]
-name = "sysmon"
-version = "0.1.0"
+name = "sysmon-tui"
+version = "0.1.1"
 edition = "2021"
 description = "A fast, beautiful, and lightweight Rust TUI system monitor for Linux"
 license = "MIT OR Apache-2.0"
@@ -11,7 +11,7 @@ categories = ["command-line-utilities"]
 authors = ["Isaac Henry"]
 
 [[bin]]
-name = "sysmon"
+name = "sysmon-tui"
 path = "src/main.rs"
 
 [dependencies]
