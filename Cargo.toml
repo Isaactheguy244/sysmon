@@ -1,0 +1,11 @@
+[package]
+name = "sysmon"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "sysmon"
+path = "src/main.rs"
+
+[dependencies]
+crossterm = "0.27"
