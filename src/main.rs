@@ -1,11 +1,10 @@
 // sysmon - Beautiful Rust TUI System Monitor
 // Copyright (c) 2026 Isaac Henry
 // SPDX-License-Identifier: MIT
-
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
     event::{
-        self, DisableMouseCapture, EnableMouseCapture,
+        self,
         Event, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
     },
     execute, queue,
@@ -17,7 +16,7 @@ use crossterm::{
 };
 use std::collections::{HashMap, VecDeque};
 use std::fs;
-use std::io::{stdout, Write};
+use std::io::{stdout, BufWriter, Write};
 use std::time::{Duration, Instant};
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -66,7 +65,7 @@ impl Buffer {
 
     // Flush only changed cells to the terminal
     fn flush_diff(&self, prev: &Buffer, out: &mut impl Write) {
-        let mut last_x = u16::MAX; let mut last_y = u16::MAX;
+        let mut cursor: Option<(u16, u16)> = None;
         let mut last_fg = Color::Reset;
         let mut last_bold = false; let mut last_dim = false; let mut last_rev = false;
 
@@ -77,11 +76,10 @@ impl Buffer {
                 let prev_cell = &prev.cells[i];
                 if curr == prev_cell { continue; }
 
-                // Move cursor if needed
-                if x != last_x + 1 || y != last_y {
+                if cursor.map_or(true, |(cx, cy)| cy != y || cx + 1 != x) {
                     queue!(out, MoveTo(x, y)).unwrap();
                 }
-                last_x = x; last_y = y;
+                cursor = Some((x, y));
 
                 // Attributes
                 if curr.bold != last_bold || curr.dim != last_dim || curr.rev != last_rev {
@@ -137,6 +135,7 @@ impl<'a> Canvas<'a> {
     fn bold(mut self) -> Self { self.bold = true; self }
     fn dim(mut self) -> Self { self.dim = true; self }
     fn rev(mut self) -> Self { self.rev = true; self }
+    fn rev_if(self, cond: bool) -> Self { if cond { self.rev() } else { self } }
 
     fn print(&mut self, x: u16, y: u16, s: &str) {
         self.buf.set_str(x, y, s, self.fg, self.bold, self.dim, self.rev);
@@ -850,25 +849,24 @@ fn render_to_buf(buf:&mut Buffer,s:&State,ui:&mut Ui,display:&[usize]) {
             // Clear the full row first
             Canvas::new(buf).fg(Color::Reset).fill_line(1,sy,tw-2,' ');
 
-            let mk_rev = |c:Canvas| -> Canvas { if sel { c.rev() } else { c } };
             let base_fg = if sel { Color::White } else { Color::Reset };
 
-            mk_rev(Canvas::new(buf).dim()).print(2,sy,&format!("{:<7}",p.pid));
-            mk_rev(Canvas::new(buf).fg(if sel{Color::White}else{Color::White}).bold())
+            Canvas::new(buf).dim().rev_if(sel).print(2,sy,&format!("{:<7}",p.pid));
+            Canvas::new(buf).fg(Color::White).bold().rev_if(sel)
                 .print(10,sy,&format!("{:<17}",p.name.chars().take(16).collect::<String>()));
-            mk_rev(Canvas::new(buf).fg(if sel{Color::White}else{Color::Cyan}))
+            Canvas::new(buf).fg(if sel{Color::White}else{Color::Cyan}).rev_if(sel)
                 .print(28,sy,&format!("{:<12}",p.user.chars().take(11).collect::<String>()));
-            mk_rev(Canvas::new(buf).fg(if sel{Color::White}else{state_col(p.state)}))
+            Canvas::new(buf).fg(if sel{Color::White}else{state_col(p.state)}).rev_if(sel)
                 .print(41,sy,&format!("{:<5}",state_lbl(p.state)));
-            mk_rev(Canvas::new(buf).fg(if sel{Color::White}else{clr(p.cpu)}))
+            Canvas::new(buf).fg(if sel{Color::White}else{clr(p.cpu)}).rev_if(sel)
                 .print(47,sy,&format!("{:>6.1}%",p.cpu));
-            mk_rev(Canvas::new(buf).fg(base_fg))
+            Canvas::new(buf).fg(base_fg).rev_if(sel)
                 .print(55,sy,&format!("{:>9}",fmt_mem(p.mem_kb)));
-            mk_rev(Canvas::new(buf).dim())
+            Canvas::new(buf).dim().rev_if(sel)
                 .print(66,sy,&format!("{:>7}",fmt_mem(p.virt_kb)));
-            mk_rev(Canvas::new(buf).dim())
+            Canvas::new(buf).dim().rev_if(sel)
                 .print(75,sy,&format!("{:>4}",p.threads));
-            mk_rev(Canvas::new(buf).dim())
+            Canvas::new(buf).dim().rev_if(sel)
                 .print(81,sy,&p.cmd.chars().take(cmd_w).collect::<String>());
         }
     }
@@ -1039,13 +1037,20 @@ fn handle_input(ev:Event,s:&State,ui:&mut Ui,display:&[usize],vis:usize) -> bool
 // ═══════════════════════════════════════════════════════════════════════════════
 
 fn main() -> std::io::Result<()> {
-    let mut out = stdout();
+    let mut out = BufWriter::with_capacity(1 << 20, stdout());
     enable_raw_mode()?;
-    execute!(out, EnterAlternateScreen, Hide, Clear(ClearType::All), EnableMouseCapture)?;
+    execute!(out, EnterAlternateScreen, Hide, Clear(ClearType::All))?;
     let result = run(&mut out);
-    execute!(out, Show, LeaveAlternateScreen, DisableMouseCapture)?;
+    execute!(out, Show, LeaveAlternateScreen)?;
     disable_raw_mode()?;
     result
+}
+
+fn compute_vis(th: u16, show_graphs: bool) -> usize {
+    let body = th.saturating_sub(2);
+    let top_h = if show_graphs { ((body as f32*0.40) as u16).max(12).min(body.saturating_sub(14)) } else { 0 };
+    let mid_h = if show_graphs { ((body as f32*0.25) as u16).max(8).min(body.saturating_sub(top_h+5)) } else { 0 };
+    body.saturating_sub(top_h+mid_h).saturating_sub(4) as usize
 }
 
 fn run(out: &mut impl Write) -> std::io::Result<()> {
@@ -1064,21 +1069,15 @@ fn run(out: &mut impl Write) -> std::io::Result<()> {
         let (ntw, nth) = size().unwrap_or((tw, th));
         if ntw != tw || nth != th {
             tw = ntw; th = nth;
-            // Force full repaint on resize
-            execute!(out, Clear(ClearType::All)).unwrap();
+            // Force full repaint on resize — queue with the frame so no blank flash
+            queue!(out, Clear(ClearType::All)).unwrap();
             prev_buf = Buffer::new(tw, th);
             for c in prev_buf.cells.iter_mut() { c.ch = '\0'; }
         }
 
         let mut cur_buf = Buffer::new(tw, th);
         let display = state.display_list(&ui);
-        let bot_h = {
-            let body = th.saturating_sub(2);
-            let top_h = if ui.show_graphs { ((body as f32*0.40) as u16).max(12).min(body.saturating_sub(14)) } else { 0 };
-            let mid_h = if ui.show_graphs { ((body as f32*0.25) as u16).max(8).min(body.saturating_sub(top_h+5)) } else { 0 };
-            body.saturating_sub(top_h+mid_h)
-        };
-        let vis = bot_h.saturating_sub(4) as usize;
+        let vis = compute_vis(th, ui.show_graphs);
 
         ui.clamp_selected(display.len());
         ui.ensure_visible(vis);
@@ -1095,11 +1094,18 @@ fn run(out: &mut impl Write) -> std::io::Result<()> {
             let wait = (deadline - now).min(Duration::from_millis(50));
             if event::poll(wait)? {
                 let ev = event::read()?;
-                if handle_input(ev, &state, &mut ui, &display, vis) { return Ok(()); }
+                // Skip redraws for mouse events that never change state
+                let state_changing = !matches!(ev,
+                    Event::Mouse(MouseEvent { kind: MouseEventKind::Moved
+                        | MouseEventKind::Up(_) | MouseEventKind::Drag(_), .. }));
+                let vis_pre = compute_vis(th, ui.show_graphs);
+                if handle_input(ev, &state, &mut ui, &display, vis_pre) { return Ok(()); }
+                if !state_changing { continue; }
                 // Redraw immediately after input — no clear, just diff
+                let vis_post = compute_vis(th, ui.show_graphs);
                 let display2 = state.display_list(&ui);
                 ui.clamp_selected(display2.len());
-                ui.ensure_visible(vis);
+                ui.ensure_visible(vis_post);
                 let mut cur2 = Buffer::new(tw, th);
                 render_to_buf(&mut cur2, &state, &mut ui, &display2);
                 cur2.flush_diff(&prev_buf, out);
@@ -1113,3 +1119,4 @@ fn run(out: &mut impl Write) -> std::io::Result<()> {
         last = Instant::now();
     }
 }
+
