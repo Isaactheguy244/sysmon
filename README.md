@@ -2,10 +2,9 @@
 
 **A fast, beautiful, and lightweight Rust TUI system monitor for Linux.**
 
-Inspired by `htop`, `glances`, and `bottom`, with smooth real-time graphs and a clean modern interface.
+![sysmon screenshot](./sysmon-screenshot.png)
 
-<!-- Add your screenshot here -->
-<!-- ![sysmon demo](screenshot.png) -->
+Inspired by `htop`, `glances`, and `bottom`, with smooth real-time graphs and a clean modern interface.
 
 ## Features
 
