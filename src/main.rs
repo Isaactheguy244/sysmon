@@ -8,7 +8,7 @@ use crossterm::{
         self, DisableMouseCapture, EnableMouseCapture,
         Event, KeyCode, KeyModifiers, MouseButton, MouseEvent, MouseEventKind,
     },
-    execute,
+    execute, queue,
     style::{Attribute, Color, ResetColor, SetAttribute, SetForegroundColor},
     terminal::{
         disable_raw_mode, enable_raw_mode, Clear, ClearType,
@@ -79,34 +79,34 @@ impl Buffer {
 
                 // Move cursor if needed
                 if x != last_x + 1 || y != last_y {
-                    execute!(out, MoveTo(x, y)).unwrap();
+                    queue!(out, MoveTo(x, y)).unwrap();
                 }
                 last_x = x; last_y = y;
 
                 // Attributes
                 if curr.bold != last_bold || curr.dim != last_dim || curr.rev != last_rev {
-                    execute!(out, SetAttribute(Attribute::Reset)).unwrap();
+                    queue!(out, SetAttribute(Attribute::Reset)).unwrap();
                     last_bold = false; last_dim = false; last_rev = false; last_fg = Color::Reset;
                 }
                 if curr.bold && !last_bold {
-                    execute!(out, SetAttribute(Attribute::Bold)).unwrap();
+                    queue!(out, SetAttribute(Attribute::Bold)).unwrap();
                     last_bold = true;
                 }
                 if curr.dim && !last_dim {
-                    execute!(out, SetAttribute(Attribute::Dim)).unwrap();
+                    queue!(out, SetAttribute(Attribute::Dim)).unwrap();
                     last_dim = true;
                 }
                 if curr.rev && !last_rev {
-                    execute!(out, SetAttribute(Attribute::Reverse)).unwrap();
+                    queue!(out, SetAttribute(Attribute::Reverse)).unwrap();
                     last_rev = true;
                 }
 
                 // Color
                 if curr.fg != last_fg {
                     if curr.fg == Color::Reset {
-                        execute!(out, ResetColor).unwrap();
+                        queue!(out, ResetColor).unwrap();
                     } else {
-                        execute!(out, SetForegroundColor(curr.fg)).unwrap();
+                        queue!(out, SetForegroundColor(curr.fg)).unwrap();
                     }
                     last_fg = curr.fg;
                 }
@@ -114,7 +114,7 @@ impl Buffer {
                 write!(out, "{}", curr.ch).unwrap();
             }
         }
-        execute!(out, SetAttribute(Attribute::Reset), ResetColor).unwrap();
+        queue!(out, SetAttribute(Attribute::Reset), ResetColor).unwrap();
         out.flush().unwrap();
     }
 }
