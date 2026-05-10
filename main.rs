@@ -1,3 +1,7 @@
+// sysmon - Beautiful Rust TUI System Monitor
+// Copyright (c) 2026 Isaac Henry
+// SPDX-License-Identifier: MIT
+
 use crossterm::{
     cursor::{Hide, MoveTo, Show},
     event::{
